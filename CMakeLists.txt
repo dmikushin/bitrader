@@ -9,6 +9,7 @@ set(PROJECT_VERSION_PATCH 0)
 set(CMAKE_CXX_STANDARD 11)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/binance-cxx-api/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/tgbot-cpp/include)
 
 link_directories(${CMAKE_CURRENT_BINARY_DIR}/binance-cxx-api)
 link_directories(${CMAKE_CURRENT_BINARY_DIR}/tgbot-cpp)
