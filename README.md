@@ -18,6 +18,8 @@ sudo apt-get install g++ make binutils cmake libssl-dev libboost-system-dev libb
 ```
 git clone https://github.com/dmikushin/bitrader.git
 cd bitrader
+git submodule init
+git submodule update
 mkdir build
 cd build/
 cmake ..
