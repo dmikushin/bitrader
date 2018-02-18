@@ -45,29 +45,43 @@ int main()
 	
 	Json::Value result;
 
-	Market market;
-
 	// Get all pairs.
+	Market market;
 	BINANCE_ERR_CHECK(market.getAllPrices(result)); 
 	
 	// Filter only "*BTC" pairs.
 	const string btc = "BTC";
 	vector<string> btcPairs;
-	for (Json::Value::ArrayIndex i = 0 ; i < result.size() ; i++)
+	for (Json::Value::ArrayIndex i = 0; i < result.size() ; i++)
 	{
 		const string& pair = result[i]["symbol"].asString();
 		if (std::equal(btc.rbegin(), btc.rend(), pair.rbegin()))
 			btcPairs.push_back(pair);
 	}
-
-	bool initial = true;	
-	vector<long> candleTime(btcPairs.size());
-	vector<double> candleAvgHigh(btcPairs.size());
-
-	TgBot::Bot bot(token.c_str());
+	
+	// Get account info.
+	Account account;
+	BINANCE_ERR_CHECK(account.getInfo(result));
+	
+	// Get account positions.
+	const Json::Value& balances = result["balances"];
+	map<string, double> positions;
+	for (Json::Value::ArrayIndex i = 0, e = balances.size(); i < e; i++)
+	{
+		const string currency = balances[i]["asset"].asString();
+		const double amount = atof(balances[i]["free"].asString().c_str());
+		
+		positions[currency] = amount;
+	}
 
 	try
 	{
+		bool initial = true;	
+		vector<long> candleTime(btcPairs.size());
+		vector<double> candleAvgHigh(btcPairs.size());
+
+		TgBot::Bot bot(token.c_str());
+
 		while (1)
 		{
 			for (int i = 0; i < btcPairs.size(); i++)
@@ -87,10 +101,17 @@ int main()
 					if ((newCandleAvgHigh >= THRESHOLD * candleAvgHigh[i]) && !initial)
 					{
 						stringstream msg;
-						string symbol(pair.c_str(), pair.size() - 3);
-						symbol += "_BTC";
+						const string currency(pair.c_str(), pair.size() - 3);
+						const string symbol = currency + "_BTC";
 						msg << "<a href=\"https://www.binance.com/tradeDetail.html?symbol=" << symbol << "\">" << pair << "</a> " <<
 							(newCandleAvgHigh / candleAvgHigh[i] * 100.0 - 100) << "% 🚀";
+							
+						// Add a note, if we are in posiion for this currency.
+						if (positions.find(currency) != positions.end())
+						{
+							double amount = positions[currency];
+							msg << " POSITION: " << amount << " " << currency;
+						}
 						bot.getApi().sendMessage(chatid, msg.str(), false, 0, TgBot::GenericReply::Ptr(), "HTML");
 					}
 
