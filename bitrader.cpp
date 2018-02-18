@@ -11,6 +11,7 @@
 
 // Pumping threshold
 #define THRESHOLD 1.02
+#define THRESHOLD_ROCKET 1.04
 
 using namespace binance;
 using namespace std;
@@ -104,8 +105,12 @@ int main()
 						stringstream msg;
 						const string currency(pair.c_str(), pair.size() - 3);
 						const string symbol = currency + "_BTC";
-						msg << "<a href=\"https://www.binance.com/tradeDetail.html?symbol=" << symbol << "\">" << pair << "</a> " <<
-							(newCandleAvgHigh / candleAvgHigh[i] * 100.0 - 100) << "% 🚀";
+						msg << "<a href=\"https://www.binance.com/tradeDetail.html?symbol=" << symbol << "\">" << pair << "</a> +" <<
+							(newCandleAvgHigh / candleAvgHigh[i] * 100.0 - 100) << "%";
+
+						// Rocket high?
+						if (newCandleAvgHigh >= THRESHOLD_ROCKET * candleAvgHigh[i])
+							 msg << " 🚀";
 							
 						// Add a note, if we are in posiion for this currency.
 						if (positions.find(currency) != positions.end())
