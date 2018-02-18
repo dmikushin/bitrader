@@ -89,7 +89,8 @@ int main()
 				const string& pair = btcPairs[i];
 	
 				// Get Klines / CandleStick for each "*BTC" pair.
-				BINANCE_ERR_CHECK(market.getKlines(pair.c_str(), "1m", 10, 0, 0, result));
+				if (market.getKlines(pair.c_str(), "1m", 10, 0, 0, result) != binanceSuccess)
+					continue;
 
 				// Find update for the current time stamp.
 				for (Json::Value::ArrayIndex j = 0; j < result.size() ; j++)
@@ -110,7 +111,8 @@ int main()
 						if (positions.find(currency) != positions.end())
 						{
 							double amount = positions[currency];
-							msg << " POSITION: " << amount << " " << currency;
+							if (amount != 0)
+								msg << " POSITION: " << amount << " " << currency;
 						}
 						bot.getApi().sendMessage(chatid, msg.str(), false, 0, TgBot::GenericReply::Ptr(), "HTML");
 					}
