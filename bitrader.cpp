@@ -69,8 +69,8 @@ int main()
 	try
 	{
 		while (1)
-		{	
-			for (int i = 0, e = btcPairs.size(); i < e; i++)
+		{
+			for (int i = 0; i < btcPairs.size(); i++)
 			{
 				const string& pair = btcPairs[i];
 	
@@ -78,7 +78,7 @@ int main()
 				BINANCE_ERR_CHECK(market.getKlines(pair.c_str(), "1m", 10, 0, 0, result));
 
 				// Find update for the current time stamp.
-				for (Json::Value::ArrayIndex j = 0 ; j < result.size() ; j++)
+				for (Json::Value::ArrayIndex j = 0; j < result.size() ; j++)
 				{
 					long newCandleTime = result[j][0].asInt64();
 					if (newCandleTime <= candleTime[i]) continue;
@@ -87,8 +87,11 @@ int main()
 					if ((newCandleAvgHigh >= THRESHOLD * candleAvgHigh[i]) && !initial)
 					{
 						stringstream msg;
-						msg << pair << " " << (newCandleAvgHigh / candleAvgHigh[i] * 100.0 - 100) << "% 🚀";
-						bot.getApi().sendMessage(chatid, msg.str());
+						string symbol(pair.c_str(), pair.size() - 3);
+						symbol += "_BTC";
+						msg << "<a href=\"https://www.binance.com/tradeDetail.html?symbol=" << symbol << "\">" << pair << "</a> " <<
+							(newCandleAvgHigh / candleAvgHigh[i] * 100.0 - 100) << "% 🚀";
+						bot.getApi().sendMessage(chatid, msg.str(), false, 0, TgBot::GenericReply::Ptr(), "HTML");
 					}
 
 					candleTime[i] = newCandleTime;
@@ -99,7 +102,6 @@ int main()
 			}
 		
 			initial = false;
-
 		}
 	}
 	catch (TgBot::TgException& e)
