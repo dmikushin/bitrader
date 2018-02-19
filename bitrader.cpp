@@ -65,16 +65,35 @@ int main()
 	BINANCE_ERR_CHECK(account.getInfo(result));
 	
 	// Get account positions.
-	const Json::Value& balances = result["balances"];
+	const Json::Value balances = result["balances"];
 	map<string, double> positions;
-	for (Json::Value::ArrayIndex i = 0, e = balances.size(); i < e; i++)
+	for (Json::Value::ArrayIndex i = 0, ie = balances.size(); i < ie; i++)
 	{
 		const string currency = balances[i]["asset"].asString();
-		const double amount = atof(balances[i]["free"].asString().c_str());
-		
+		const string symbol = currency + "BTC";
+		double amount = atof(balances[i]["free"].asString().c_str());
+				
 		positions[currency] = amount;
 	}
 
+	BINANCE_ERR_CHECK(account.getOpenOrders(result));
+
+	for (Json::Value::ArrayIndex j = 0, je = result.size(); j < je; j++)
+	{
+		const Json::Value& order = result[j];
+
+		const string symbol = order["symbol"].asString();
+		const string currency(symbol.c_str(), symbol.size() - 3);
+
+		const string side = order["side"].asString();
+		if (side != "SELL") continue;
+	
+		const double origQty = atof(order["origQty"].asString().c_str());
+		const double executedQty = atof(order["executedQty"].asString().c_str());
+	
+		positions[currency] += origQty - executedQty;
+	}
+	
 	try
 	{
 		bool initial = true;	
@@ -117,7 +136,7 @@ int main()
 						{
 							double amount = positions[currency];
 							if (amount != 0)
-								msg << " POSITION: " << amount << " " << currency;
+								msg << " POSITION: " << amount;
 						}
 						bot.getApi().sendMessage(chatid, msg.str(), false, 0, TgBot::GenericReply::Ptr(), "HTML");
 					}
