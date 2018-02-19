@@ -1,6 +1,8 @@
 #include <fstream>
 #include <iostream>
 #include <jsoncpp/json/json.h>
+#include <limits>
+#include <set>
 #include <streambuf>
 #include <string>
 #include <tgbot/tgbot.h>
@@ -18,6 +20,8 @@ using namespace std;
 
 int main()
 {
+	cout << "Initializing ..." << endl;
+
 	// Read telegram token.
 	string token;
 	{
@@ -59,28 +63,43 @@ int main()
 		if (std::equal(btc.rbegin(), btc.rend(), pair.rbegin()))
 			btcPairs.push_back(pair);
 	}
+	btcPairs.push_back("BNB_BTC");
+
+	cout << "Finding current positions ..." << endl;
 	
 	// Get account info.
 	Account account;
 	BINANCE_ERR_CHECK(account.getInfo(result));
+
+	struct Position
+	{
+		// Amount in currency.
+		double amount;
+		
+		// The purchase value of amount, according to trading history.
+		double value;
+	};
+
+	map<string, Position> positions;
 	
-	// Get account positions.
+	// Get amounts for all positions in accout.
 	const Json::Value balances = result["balances"];
-	map<string, double> positions;
-	for (Json::Value::ArrayIndex i = 0, ie = balances.size(); i < ie; i++)
+	for (Json::Value::ArrayIndex i = 0, e = balances.size(); i < e; i++)
 	{
 		const string currency = balances[i]["asset"].asString();
 		const string symbol = currency + "BTC";
 		double amount = atof(balances[i]["free"].asString().c_str());
-				
-		positions[currency] = amount;
+
+		if (std::find(btcPairs.begin(), btcPairs.end(), currency + "_BTC") != btcPairs.end())
+			positions[currency].amount = amount;
 	}
 
 	BINANCE_ERR_CHECK(account.getOpenOrders(result));
 
-	for (Json::Value::ArrayIndex j = 0, je = result.size(); j < je; j++)
+	// Adding open orders to position amount.
+	for (Json::Value::ArrayIndex i = 0, e = result.size(); i < e; i++)
 	{
-		const Json::Value& order = result[j];
+		const Json::Value& order = result[i];
 
 		const string symbol = order["symbol"].asString();
 		const string currency(symbol.c_str(), symbol.size() - 3);
@@ -91,8 +110,118 @@ int main()
 		const double origQty = atof(order["origQty"].asString().c_str());
 		const double executedQty = atof(order["executedQty"].asString().c_str());
 	
-		positions[currency] += origQty - executedQty;
+		positions[currency].amount += origQty - executedQty;
 	}
+
+	for (map<string, Position>::iterator i = positions.begin(), ie = positions.end(); i != ie; i++)
+		cout << i->first << " : " << i->second.amount << endl;
+
+	cout << "Finding positions purchase values ..." << endl;
+	
+	// Get all orders for currencies we are in position for
+	// and calculate the purchase price (in BTC) of the available amount.
+	double totalValue = 0;
+	for (map<string, Position>::iterator i = positions.begin(), ie = positions.end(); i != ie; i++)
+	{
+		const string& currency = i->first;
+		const string symbol = currency + "BTC";
+		const double amount = i->second.amount;
+		
+		if (amount == 0) continue;
+				
+		// TODO limited to 500 transactions
+		account.getAllOrders(result, symbol.c_str());
+
+		struct Purchase
+		{
+			double price;
+			double amount;
+
+			bool operator<(const Purchase& other) const
+			{
+			    return price * amount < other.price * other.amount;
+			}
+			
+			Purchase(const double price_, const double amount_) : price(price_), amount(amount_) { }
+		};
+
+		// Run all orders, balancing buys and sells.
+		set<Purchase> purchases;
+		for (Json::Value::ArrayIndex j = 0, je = result.size(); j < je; j++)
+		{
+			const Json::Value& order = result[j];
+			
+			const string side = order["side"].asString();
+			if (side == "BUY")
+			{
+				const double price = atof(order["price"].asString().c_str());
+				const double amount = atof(order["executedQty"].asString().c_str());
+				
+				purchases.insert(Purchase(price, amount));	
+			}
+			else if (side == "SELL")
+			{
+				const double price = atof(order["price"].asString().c_str());
+				double amount = atof(order["executedQty"].asString().c_str());
+
+				// Substract from purchases until done.
+				while (1)
+				{				
+					// Find purchase with the largest (worst) price.
+					set<Purchase>::iterator maxPurchase = purchases.begin();
+					for (set<Purchase>::iterator k = purchases.begin(), ke = purchases.end(); k != ke; k++)
+					{
+						if ((k->price > maxPurchase->price) && (maxPurchase->amount > 0))
+							maxPurchase = k;
+					}
+					
+					if (maxPurchase->amount < amount)
+					{
+						amount -= maxPurchase->amount;
+						purchases.erase(maxPurchase);
+					}
+					else
+					{
+						int npurchases = purchases.size();
+						purchases.insert(Purchase(maxPurchase->price, maxPurchase->amount - amount));
+						if (npurchases < purchases.size())
+							purchases.erase(maxPurchase);
+						break;
+					}
+				}
+			}
+		}
+		
+		// Finally, calculate the purchase price of unsold amount.
+		double value = 0;
+		double totalAmount = 0;
+		for (set<Purchase>::iterator k = purchases.begin(), ke = purchases.end(); k != ke; k++)
+		{	
+			value += k->price * k->amount;
+			totalAmount += k->amount;
+		}
+		
+		if (fabs(totalAmount - positions[currency].amount) > numeric_limits<double>::epsilon())
+		{
+			// Do not check BNB: it could be used also used to pay comissions,
+			// which are not accounted into the trade data.
+			if (currency != "BNB")
+			{
+				fprintf(stderr, "Reported and calculated position amounts mismatch: %f != %f\n",
+					totalAmount, positions[currency].amount);
+				exit(1);
+			}
+		}
+		
+		positions[currency].value = value;
+		
+		cout << currency << " : " << value << " BTC" << endl;
+		
+		totalValue += value;
+	}
+	
+	cout << "Total account value : " << totalValue << " BTC" << endl;
+	cout << "OK!" << endl << endl;
 	
 	try
 	{
@@ -134,9 +263,19 @@ int main()
 						// Add a note, if we are in posiion for this currency.
 						if (positions.find(currency) != positions.end())
 						{
-							double amount = positions[currency];
+							double amount = positions[currency].amount;
 							if (amount != 0)
+							{
 								msg << " POSITION: " << amount;
+								
+								if (newCandleAvgHigh * amount > THRESHOLD_ROCKET * positions[currency].value)
+								{
+									double profit = newCandleAvgHigh * amount / positions[currency].value * 100 - 100;
+									msg << " RECOM: SELL +" << profit << "%";
+								}
+								else
+									msg << " RECOM: HOLD";
+							}
 						}
 						bot.getApi().sendMessage(chatid, msg.str(), false, 0, TgBot::GenericReply::Ptr(), "HTML");
 					}
