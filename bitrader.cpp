@@ -236,6 +236,8 @@ int main()
 			for (int i = 0; i < btcPairs.size(); i++)
 			{
 				const string& pair = btcPairs[i];
+
+				if (pair == "BNB_BTC") continue;
 	
 				// Get Klines / CandleStick for each "*BTC" pair.
 				if (market.getKlines(pair.c_str(), "1m", 10, 0, 0, result) != binanceSuccess)
