@@ -2,6 +2,7 @@
 #include <iostream>
 #include <jsoncpp/json/json.h>
 #include <limits>
+#include <queue>
 #include <set>
 #include <streambuf>
 #include <string>
@@ -266,6 +267,8 @@ int main()
 		vector<bool> candleHot(btcPairs.size());
 
 		TgBot::Bot bot(token.c_str());
+		
+		queue<string> msgQueue;
 
 		while (1)
 		{
@@ -326,9 +329,32 @@ int main()
 									msg << " RECOM: <b>BUY</b>";
 							}
 						}
-						bot.getApi().sendMessage(chatid, msg.str(), false, 0, TgBot::GenericReply::Ptr(), "HTML");
-						
+
+						// Make BUY on the next round more attractive if the currently seen value
+						// is above the threshold (i.e. a hot candle).
 						hot = true;
+
+						// Communicate the result over the Telegram.
+						try
+						{
+							// First, send queued messages, if any.
+							if (msgQueue.size())
+								for (int i = 0, e = msgQueue.size(); i < e; i++)
+								{
+									bot.getApi().sendMessage(chatid, msgQueue.front(), false, 0, TgBot::GenericReply::Ptr(), "HTML");
+									msgQueue.pop();
+								}
+									
+							bot.getApi().sendMessage(chatid, msg.str(), false, 0, TgBot::GenericReply::Ptr(), "HTML");
+						}
+						catch (TgBot::TgException& e)
+						{
+							fprintf(stderr, "error: %s\n", e.what());
+							
+							// Store message in the queue to repeat the sending
+							// attempt next time.
+							msgQueue.push(msg.str());
+						}
 					}
 					else
 						buy = -INT_MAX;
