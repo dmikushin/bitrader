@@ -63,7 +63,6 @@ int main()
 		if (std::equal(btc.rbegin(), btc.rend(), pair.rbegin()))
 			btcPairs.push_back(pair);
 	}
-	btcPairs.push_back("BNB_BTC");
 
 	cout << "Finding current positions ..." << endl;
 	
@@ -90,7 +89,9 @@ int main()
 		const string symbol = currency + "BTC";
 		double amount = atof(balances[i]["free"].asString().c_str());
 
-		if (std::find(btcPairs.begin(), btcPairs.end(), currency + "_BTC") != btcPairs.end())
+		if (amount <= 0) continue;
+
+		if (std::find(btcPairs.begin(), btcPairs.end(), currency + "BTC") != btcPairs.end())
 			positions[currency].amount = amount;
 	}
 
@@ -220,7 +221,41 @@ int main()
 		totalValue += value;
 	}
 	
-	cout << "Total account value : " << totalValue << " BTC" << endl;
+	cout << "Total account purchase value : " << totalValue << " BTC" << endl;
+
+	cout << "Finding positions actual values ..." << endl;
+
+	double totalActualValue = 0;
+	BINANCE_ERR_CHECK(market.getAllPrices(result)); 
+	for (Json::Value::ArrayIndex i = 0; i < result.size() ; i++)
+	{
+		const string& pair = result[i]["symbol"].asString();
+
+		if (!std::equal(btc.rbegin(), btc.rend(), pair.rbegin()))
+			continue;
+
+		const string currency(pair.c_str(), pair.size() - 3);
+		if (positions.find(currency) != positions.end())
+		{
+			double price = atof(result[i]["price"].asString().c_str());
+			double value = positions[currency].amount * price;
+			
+			double ratio = value / positions[currency].value * 100 - 100;
+
+			cout << currency << " : " << value << " BTC (";
+			if (ratio > 0) cout << "+";
+			cout << ratio << "%)" << endl;
+
+			totalActualValue += value;
+		}
+	}
+
+	cout << "Total account actual value : " << totalActualValue << " BTC (";
+	{
+		double ratio = totalActualValue / totalValue * 100 - 100;
+		if (ratio > 0) cout << "+";
+		cout << ratio << "%)" << endl;
+	}
 	cout << "OK!" << endl << endl;
 	
 	try
@@ -242,19 +277,23 @@ int main()
 				// Get Klines / CandleStick for each "*BTC" pair.
 				if (market.getKlines(pair.c_str(), "1m", 10, 0, 0, result) != binanceSuccess)
 					continue;
-
+				
 				// Find update for the current time stamp.
+				int buy = -1;
 				for (Json::Value::ArrayIndex j = 0; j < result.size() ; j++)
 				{
 					long newCandleTime = result[j][0].asInt64();
 					if (newCandleTime <= candleTime[i]) continue;
-
+					
 					double newCandleAvgHigh = atof(result[j][4].asString().c_str());
 					if ((newCandleAvgHigh >= THRESHOLD * candleAvgHigh[i]) && !initial)
 					{
+						buy++;
+
 						stringstream msg;
 						const string currency(pair.c_str(), pair.size() - 3);
 						const string symbol = currency + "_BTC";
+
 						msg << "<a href=\"https://www.binance.com/tradeDetail.html?symbol=" << symbol << "\">" << pair << "</a> +" <<
 							(newCandleAvgHigh / candleAvgHigh[i] * 100.0 - 100) << "%";
 
@@ -270,7 +309,7 @@ int main()
 							{
 								msg << " POSITION: " << amount;
 								
-								if (newCandleAvgHigh * amount > THRESHOLD_ROCKET * positions[currency].value)
+								if (newCandleAvgHigh * amount > THRESHOLD * positions[currency].value)
 								{
 									double profit = newCandleAvgHigh * amount / positions[currency].value * 100 - 100;
 									msg << " RECOM: SELL +" << profit << "%";
@@ -278,9 +317,16 @@ int main()
 								else
 									msg << " RECOM: HOLD";
 							}
+							else
+							{
+								if ((buy > 1) && (j == (result.size() - 1)))
+									msg << " RECOM: <b>BUY</b>";
+							}
 						}
 						bot.getApi().sendMessage(chatid, msg.str(), false, 0, TgBot::GenericReply::Ptr(), "HTML");
 					}
+					else
+						buy = -INT_MAX;
 
 					candleTime[i] = newCandleTime;
 					candleAvgHigh[i] = newCandleAvgHigh;
