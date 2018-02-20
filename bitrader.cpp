@@ -69,7 +69,19 @@ int main()
 	
 	// Get account info.
 	Account account;
-	BINANCE_ERR_CHECK(account.getInfo(result));
+	{
+		binanceError_t status = account.getInfo(result);
+		if (status == binanceErrorMissingAccountKeys)
+		{
+			fprintf(stderr, "\nCannot find the api/secret keys pair for Binance account!\n");
+			fprintf(stderr, "The user should either provide them to Account constructor,\n");
+			fprintf(stderr, "or in the following files: %s, %s\n\n",
+				binance::Account::default_api_key_path.c_str(),
+				binance::Account::default_secret_key_path.c_str());
+		}
+
+		BINANCE_ERR_CHECK(status);
+	}
 
 	struct Position
 	{
