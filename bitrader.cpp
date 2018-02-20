@@ -263,6 +263,7 @@ int main()
 		bool initial = true;	
 		vector<long> candleTime(btcPairs.size());
 		vector<double> candleAvgHigh(btcPairs.size());
+		vector<bool> candleHot(btcPairs.size());
 
 		TgBot::Bot bot(token.c_str());
 
@@ -280,6 +281,7 @@ int main()
 				
 				// Find update for the current time stamp.
 				int buy = -1;
+				bool hot = false;
 				for (Json::Value::ArrayIndex j = 0; j < result.size() ; j++)
 				{
 					long newCandleTime = result[j][0].asInt64();
@@ -319,11 +321,14 @@ int main()
 							}
 							else
 							{
+								if (candleHot[i]) buy++;
 								if ((buy > 1) && (j == (result.size() - 1)))
 									msg << " RECOM: <b>BUY</b>";
 							}
 						}
 						bot.getApi().sendMessage(chatid, msg.str(), false, 0, TgBot::GenericReply::Ptr(), "HTML");
+						
+						hot = true;
 					}
 					else
 						buy = -INT_MAX;
@@ -331,6 +336,7 @@ int main()
 					candleTime[i] = newCandleTime;
 					candleAvgHigh[i] = newCandleAvgHigh;
 				}
+				candleHot[i] = hot;
 			
 				cout << pair << " : " << candleTime[i] << " : " << candleAvgHigh[i] << endl;
 			}
