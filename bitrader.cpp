@@ -2,15 +2,12 @@
 #include <iostream>
 #include <jsoncpp/json/json.h>
 #include <limits>
-#include <queue>
 #include <set>
-#include <streambuf>
 #include <string>
-#include <tgbot/tgbot.h>
 #include <vector>
-#include <wordexp.h>
 
 #include "binance.h"
+#include "telegram.h"
 
 // Pumping threshold
 #define THRESHOLD 1.02
@@ -18,41 +15,43 @@
 
 using namespace binance;
 using namespace std;
+using namespace telegram;
 
 int main()
 {
 	cout << "Initializing ..." << endl;
 
-	// Read telegram token.
-	string token;
+	Account account;
+	if (!account.keysAreSet())
 	{
-		wordexp_t p;
-		char** w;
-		wordexp("$HOME/.bitrader/telegrambot/token", &p, 0);
-		w = p.we_wordv;
-		ifstream telegrambot(w[0]);
-		telegrambot >> token;
-		telegrambot.close();
-		wordfree(&p);
+		fprintf(stderr, "\nCannot find the api/secret keys pair for Binance account!\n");
+		fprintf(stderr, "The user should either provide them to Account constructor,\n");
+		fprintf(stderr, "or in the following files: %s, %s\n\n",
+			binance::Account::default_api_key_path.c_str(),
+			binance::Account::default_secret_key_path.c_str());
+
+		exit(1);
 	}
-	
-	// Read telegram chat id.
-	unsigned long chatid;
+
+	Bot telegram;
+	if (!telegram.keysAreSet())
 	{
-		wordexp_t p;
-		char** w;
-		wordexp("$HOME/.bitrader/telegrambot/chatid", &p, 0);
-		w = p.we_wordv;
-		ifstream telegrambot(w[0]);
-		telegrambot >> chatid;
-		telegrambot.close();
-		wordfree(&p);
+		fprintf(stderr, "\nCannot find the token/chatid keys pair for Telegram account!\n");
+		fprintf(stderr, "The user should either provide them to Telegram constructor,\n");
+		fprintf(stderr, "or in the following files: %s, %s\n\n",
+			telegram::Bot::default_token_path.c_str(),
+			telegram::Bot::default_chatid_path.c_str());
+
+		exit(1);
 	}
+
+	Market market;
 	
+	cout << "Getting all *BTC pairs ..." << endl;
+
 	Json::Value result;
 
 	// Get all pairs.
-	Market market;
 	BINANCE_ERR_CHECK(market.getAllPrices(result)); 
 	
 	// Filter only "*BTC" pairs.
@@ -68,20 +67,7 @@ int main()
 	cout << "Finding current positions ..." << endl;
 	
 	// Get account info.
-	Account account;
-	{
-		binanceError_t status = account.getInfo(result);
-		if (status == binanceErrorMissingAccountKeys)
-		{
-			fprintf(stderr, "\nCannot find the api/secret keys pair for Binance account!\n");
-			fprintf(stderr, "The user should either provide them to Account constructor,\n");
-			fprintf(stderr, "or in the following files: %s, %s\n\n",
-				binance::Account::default_api_key_path.c_str(),
-				binance::Account::default_secret_key_path.c_str());
-		}
-
-		BINANCE_ERR_CHECK(status);
-	}
+	BINANCE_ERR_CHECK(account.getInfo(result));
 
 	struct Position
 	{
@@ -271,131 +257,101 @@ int main()
 	}
 	cout << "OK!" << endl << endl;
 	
-	try
+	bool initial = true;	
+	vector<long> candleTime(btcPairs.size());
+	vector<double> candleAvgHigh(btcPairs.size());
+	vector<bool> candleHot(btcPairs.size());
+
+	while (1)
 	{
-		bool initial = true;	
-		vector<long> candleTime(btcPairs.size());
-		vector<double> candleAvgHigh(btcPairs.size());
-		vector<bool> candleHot(btcPairs.size());
-
-		TgBot::Bot bot(token.c_str());
-		
-		queue<string> msgQueue;
-
-		while (1)
+		#pragma omp parallel for num_threads(2)
+		for (int i = 0; i < btcPairs.size(); i++)
 		{
-			#pragma omp parallel for num_threads(2)
-			for (int i = 0; i < btcPairs.size(); i++)
+			const string& pair = btcPairs[i];
+
+			if (pair == "BNB_BTC") continue;
+
+			// Use thread-private result container.
+			Json::Value result;
+
+			// Get Klines / CandleStick for each "*BTC" pair.
+			while (1)
 			{
-				const string& pair = btcPairs[i];
-
-				if (pair == "BNB_BTC") continue;
-
-				// Use thread-private result container.
-				Json::Value result;
-	
-				// Get Klines / CandleStick for each "*BTC" pair.
-				while (1)
-				{
-					binanceError_t status = market.getKlines(pair.c_str(), "1m", 10, 0, 0, result);
-					
-					if (status == binanceSuccess) break;
-					
-					fprintf(stderr, "%s\n", binanceGetErrorString(status));
-				}
+				binanceError_t status = market.getKlines(pair.c_str(), "1m", 10, 0, 0, result);
 				
-				// Find update for the current time stamp.
-				int buy = -1;
-				bool hot = false;
-				for (Json::Value::ArrayIndex j = 0; j < result.size() ; j++)
+				if (status == binanceSuccess) break;
+				
+				fprintf(stderr, "%s\n", binanceGetErrorString(status));
+			}
+			
+			// Find update for the current time stamp.
+			int buy = -1;
+			bool hot = false;
+			for (Json::Value::ArrayIndex j = 0; j < result.size() ; j++)
+			{
+				long newCandleTime = result[j][0].asInt64();
+				if (newCandleTime <= candleTime[i]) continue;
+				
+				double newCandleAvgHigh = atof(result[j][4].asString().c_str());
+				if ((newCandleAvgHigh >= THRESHOLD * candleAvgHigh[i]) && !initial)
 				{
-					long newCandleTime = result[j][0].asInt64();
-					if (newCandleTime <= candleTime[i]) continue;
-					
-					double newCandleAvgHigh = atof(result[j][4].asString().c_str());
-					if ((newCandleAvgHigh >= THRESHOLD * candleAvgHigh[i]) && !initial)
+					buy++;
+
+					stringstream msg;
+					const string currency(pair.c_str(), pair.size() - 3);
+					const string symbol = currency + "_BTC";
+
+					msg << "<a href=\"https://www.binance.com/tradeDetail.html?symbol=" << symbol << "\">" << pair << "</a> +" <<
+						(newCandleAvgHigh / candleAvgHigh[i] * 100.0 - 100) << "%";
+
+					// Rocket high?
+					if (newCandleAvgHigh >= THRESHOLD_ROCKET * candleAvgHigh[i])
+						 msg << " 🚀";
+						
+					// Add a note, if we are in posiion for this currency.
+					if (positions.find(currency) != positions.end())
 					{
-						buy++;
-
-						stringstream msg;
-						const string currency(pair.c_str(), pair.size() - 3);
-						const string symbol = currency + "_BTC";
-
-						msg << "<a href=\"https://www.binance.com/tradeDetail.html?symbol=" << symbol << "\">" << pair << "</a> +" <<
-							(newCandleAvgHigh / candleAvgHigh[i] * 100.0 - 100) << "%";
-
-						// Rocket high?
-						if (newCandleAvgHigh >= THRESHOLD_ROCKET * candleAvgHigh[i])
-							 msg << " 🚀";
-							
-						// Add a note, if we are in posiion for this currency.
-						if (positions.find(currency) != positions.end())
+						double amount = positions[currency].amount;
+						if (amount != 0)
 						{
-							double amount = positions[currency].amount;
-							if (amount != 0)
+							msg << " POSITION: " << amount;
+							
+							if (newCandleAvgHigh * amount > THRESHOLD * positions[currency].value)
 							{
-								msg << " POSITION: " << amount;
-								
-								if (newCandleAvgHigh * amount > THRESHOLD * positions[currency].value)
-								{
-									double profit = newCandleAvgHigh * amount / positions[currency].value * 100 - 100;
-									msg << " RECOM: SELL +" << profit << "%";
-								}
-								else
-									msg << " RECOM: HOLD";
+								double profit = newCandleAvgHigh * amount / positions[currency].value * 100 - 100;
+								msg << " RECOM: SELL +" << profit << "%";
 							}
 							else
-							{
-								if (candleHot[i]) buy++;
-								if ((buy > 1) && (j == (result.size() - 1)))
-									msg << " RECOM: <b>BUY</b>";
-							}
+								msg << " RECOM: HOLD";
 						}
-
-						// Make BUY on the next round more attractive if the currently seen value
-						// is above the threshold (i.e. a hot candle).
-						hot = true;
-
-						// Communicate the result over the Telegram.
-						try
+						else
 						{
-							// First, send queued messages, if any.
-							if (msgQueue.size())
-								for (int i = 0, e = msgQueue.size(); i < e; i++)
-								{
-									bot.getApi().sendMessage(chatid, msgQueue.front(), false, 0, TgBot::GenericReply::Ptr(), "HTML");
-									msgQueue.pop();
-								}
-									
-							bot.getApi().sendMessage(chatid, msg.str(), false, 0, TgBot::GenericReply::Ptr(), "HTML");
-						}
-						catch (TgBot::TgException& e)
-						{
-							fprintf(stderr, "error: %s\n", e.what());
-							
-							// Store message in the queue to repeat the sending
-							// attempt next time.
-							msgQueue.push(msg.str());
+							if (candleHot[i]) buy++;
+							if ((buy > 1) && (j == (result.size() - 1)))
+								msg << " RECOM: <b>BUY</b>";
 						}
 					}
-					else
-						buy = -INT_MAX;
 
-					candleTime[i] = newCandleTime;
-					candleAvgHigh[i] = newCandleAvgHigh;
+					// Make BUY on the next round more attractive if the currently seen value
+					// is above the threshold (i.e. a hot candle).
+					hot = true;
+
+					// Communicate the result over the Telegram.
+					telegram.sendMessage(msg.str());
 				}
-				candleHot[i] = hot;
-			
-				cout << pair << " : " << candleTime[i] << " : " << candleAvgHigh[i] << endl;
+				else
+					buy = -INT_MAX;
+
+				candleTime[i] = newCandleTime;
+				candleAvgHigh[i] = newCandleAvgHigh;
 			}
+			candleHot[i] = hot;
 		
-			initial = false;
+			cout << pair << " : " << candleTime[i] << " : " << candleAvgHigh[i] << endl;
 		}
+	
+		initial = false;
 	}
-	catch (TgBot::TgException& e)
-	{
-        fprintf(stderr, "error: %s\n", e.what());
-    }
 
 	return 0;
 }

@@ -15,12 +15,6 @@ if(OPENMP_FOUND)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/binance-cxx-api/include)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/tgbot-cpp/include)
-
-link_directories(${CMAKE_CURRENT_BINARY_DIR}/binance-cxx-api)
-link_directories(${CMAKE_CURRENT_BINARY_DIR}/tgbot-cpp)
-
 # Manual build type selection (for debugging purposes)
 #set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_BUILD_TYPE Release)
@@ -28,6 +22,13 @@ set(CMAKE_BUILD_TYPE Release)
 add_subdirectory(binance-cxx-api)
 add_subdirectory(tgbot-cpp)
 
-add_executable(bitrader bitrader.cpp)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/binance-cxx-api/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/tgbot-cpp/include)
+
+link_directories(${CMAKE_CURRENT_BINARY_DIR}/binance-cxx-api)
+link_directories(${CMAKE_CURRENT_BINARY_DIR}/tgbot-cpp)
+
+add_executable(bitrader bitrader.cpp telegram.h telegram.cpp telegram_bot.cpp)
 target_link_libraries(bitrader binance-cxx-api tgbot-cpp)
 
