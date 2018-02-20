@@ -290,6 +290,9 @@ int main()
 				const string& pair = btcPairs[i];
 
 				if (pair == "BNB_BTC") continue;
+
+				// Use thread-private result container.
+				Json::Value result;
 	
 				// Get Klines / CandleStick for each "*BTC" pair.
 				while (1)
