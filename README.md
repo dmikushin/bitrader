@@ -1,5 +1,7 @@
 ## BITrader - Trading and Alering Service for Binance Cryptocurrency Exchange
 
+<img src="screenshot.png" width="350"/>
+
 BITrader - Trading and Alering Service for Binance Cryptocurrency Exchange (http://binance.com):
 
  * Monitor all '\*BTC' symbols trades and detect pumps
