@@ -329,12 +329,12 @@ int main()
 							else
 								msg << " RECOM: HOLD";
 						}
-						else
-						{
-							if (candle[i].hot) buy++;
-							if ((buy >= 1) && (j == (result.size() - 1)))
-								msg << " RECOM: <b>BUY</b>";
-						}
+					}
+					else
+					{
+						if (candle[i].hot) buy++;
+						if ((buy >= 1) && (j == (result.size() - 1)))
+							msg << " RECOM: <b>BUY</b>";
 					}
 
 					// Make BUY on the next round more attractive if the currently seen value
