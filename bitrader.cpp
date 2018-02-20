@@ -346,8 +346,11 @@ int main()
 				}
 				else
 				{
-					buy = -INT_MAX;
-					hot = false;
+					if (newCandleAvgHigh < candle[i].avgHigh)
+					{
+						buy = -INT_MAX;
+						hot = false;
+					}
 				}
 
 				candle[i].time = newCandleTime;
