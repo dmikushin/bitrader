@@ -257,10 +257,15 @@ int main()
 	}
 	cout << "OK!" << endl << endl;
 	
+	struct Candle
+	{
+		long time;
+		double avgHigh;
+		bool hot;
+	};
+	
 	bool initial = true;	
-	vector<long> candleTime(btcPairs.size());
-	vector<double> candleAvgHigh(btcPairs.size());
-	vector<bool> candleHot(btcPairs.size());
+	vector<Candle> candle(btcPairs.size());
 
 	while (1)
 	{
@@ -290,10 +295,10 @@ int main()
 			for (Json::Value::ArrayIndex j = 0; j < result.size() ; j++)
 			{
 				long newCandleTime = result[j][0].asInt64();
-				if (newCandleTime <= candleTime[i]) continue;
+				if (newCandleTime <= candle[i].time) continue;
 				
 				double newCandleAvgHigh = atof(result[j][4].asString().c_str());
-				if ((newCandleAvgHigh >= THRESHOLD * candleAvgHigh[i]) && !initial)
+				if ((newCandleAvgHigh >= THRESHOLD * candle[i].avgHigh) && !initial)
 				{
 					buy++;
 
@@ -302,13 +307,13 @@ int main()
 					const string symbol = currency + "_BTC";
 
 					msg << "<a href=\"https://www.binance.com/tradeDetail.html?symbol=" << symbol << "\">" << pair << "</a> +" <<
-						(newCandleAvgHigh / candleAvgHigh[i] * 100.0 - 100) << "%";
+						(newCandleAvgHigh / candle[i].avgHigh * 100.0 - 100) << "% 📈";
 
 					// Rocket high?
-					if (newCandleAvgHigh >= THRESHOLD_ROCKET * candleAvgHigh[i])
+					if (newCandleAvgHigh >= THRESHOLD_ROCKET * candle[i].avgHigh)
 						 msg << " 🚀";
 						
-					// Add a note, if we are in posiion for this currency.
+					// Add a note, if we are in position for this currency.
 					if (positions.find(currency) != positions.end())
 					{
 						double amount = positions[currency].amount;
@@ -326,8 +331,8 @@ int main()
 						}
 						else
 						{
-							if (candleHot[i]) buy++;
-							if ((buy > 1) && (j == (result.size() - 1)))
+							if (candle[i].hot) buy++;
+							if ((buy >= 1) && (j == (result.size() - 1)))
 								msg << " RECOM: <b>BUY</b>";
 						}
 					}
@@ -340,14 +345,17 @@ int main()
 					telegram.sendMessage(msg.str());
 				}
 				else
+				{
 					buy = -INT_MAX;
+					hot = false;
+				}
 
-				candleTime[i] = newCandleTime;
-				candleAvgHigh[i] = newCandleAvgHigh;
+				candle[i].time = newCandleTime;
+				candle[i].avgHigh = newCandleAvgHigh;
 			}
-			candleHot[i] = hot;
+			candle[i].hot = hot;
 		
-			cout << pair << " : " << candleTime[i] << " : " << candleAvgHigh[i] << endl;
+			cout << pair << " : " << candle[i].time << " : " << candle[i].avgHigh << endl;
 		}
 	
 		initial = false;
