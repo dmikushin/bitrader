@@ -272,6 +272,7 @@ int main()
 
 		while (1)
 		{
+			#pragma omp parallel for num_threads(2)
 			for (int i = 0; i < btcPairs.size(); i++)
 			{
 				const string& pair = btcPairs[i];
@@ -279,8 +280,14 @@ int main()
 				if (pair == "BNB_BTC") continue;
 	
 				// Get Klines / CandleStick for each "*BTC" pair.
-				if (market.getKlines(pair.c_str(), "1m", 10, 0, 0, result) != binanceSuccess)
-					continue;
+				while (1)
+				{
+					binanceError_t status = market.getKlines(pair.c_str(), "1m", 10, 0, 0, result);
+					
+					if (status == binanceSuccess) break;
+					
+					fprintf(stderr, "%s\n", binanceGetErrorString(status));
+				}
 				
 				// Find update for the current time stamp.
 				int buy = -1;
