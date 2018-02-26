@@ -5,8 +5,7 @@
 BITrader - Trading and Alering Service for Binance Cryptocurrency Exchange (http://binance.com):
 
  * Monitor all '\*BTC' symbols trades and detect pumps
- * Send alerts to Telegram bot
- * Sell/buy stock using heuristics or by trader's interactive decision in Telegram
+ * Send crypto signals to the attached Telegram bot
 
 ### Prerequisites
 
@@ -28,3 +27,6 @@ cmake ..
 ./bitrader
 ```
 
+### Liability
+
+Use this program at your own risk. None of the contributors to this project are liable for any loses you may incur. Be wise and always do your own research.
