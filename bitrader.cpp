@@ -21,7 +21,9 @@ int main()
 {
 	cout << "Initializing ..." << endl;
 
-	Account account;
+	Server server;
+
+	Account account(server);
 	if (!account.keysAreSet())
 	{
 		fprintf(stderr, "\nCannot find the api/secret keys pair for Binance account!\n");
@@ -45,7 +47,7 @@ int main()
 		exit(1);
 	}
 
-	Market market;
+	Market market(server);
 	
 	cout << "Getting all *BTC pairs ..." << endl;
 
@@ -57,7 +59,7 @@ int main()
 	// Filter only "*BTC" pairs.
 	const string btc = "BTC";
 	vector<string> btcPairs;
-	for (Json::Value::ArrayIndex i = 0; i < result.size() ; i++)
+	for (Json::Value::ArrayIndex i = 0; i < result.size(); i++)
 	{
 		const string& pair = result[i]["symbol"].asString();
 		if (std::equal(btc.rbegin(), btc.rend(), pair.rbegin()))
@@ -124,6 +126,10 @@ int main()
 	for (map<string, Position>::iterator i = positions.begin(), ie = positions.end(); i != ie; i++)
 	{
 		const string& currency = i->first;
+
+		// TODO Quickly escape currencies purchases not for BTC.
+		if (currency == "OST") continue;
+
 		const string symbol = currency + "BTC";
 		const double amount = i->second.amount;
 		
@@ -200,7 +206,10 @@ int main()
 			value += k->price * k->amount;
 			totalAmount += k->amount;
 		}
-		
+
+#if 0
+		// Some balances could be seeded, e.g. by new coins.
+		// So, we should expect some positions could appear by other means than trading.		
 		if (fabs(totalAmount - positions[currency].amount) > numeric_limits<double>::epsilon())
 		{
 			// Do not check BNB: it could be used also used to pay comissions,
@@ -212,6 +221,7 @@ int main()
 				exit(1);
 			}
 		}
+#endif
 		
 		positions[currency].value = value;
 		
@@ -226,7 +236,7 @@ int main()
 
 	double totalActualValue = 0;
 	BINANCE_ERR_CHECK(market.getAllPrices(result)); 
-	for (Json::Value::ArrayIndex i = 0; i < result.size() ; i++)
+	for (Json::Value::ArrayIndex i = 0; i < result.size(); i++)
 	{
 		const string& pair = result[i]["symbol"].asString();
 
@@ -257,15 +267,16 @@ int main()
 	}
 	cout << "OK!" << endl << endl;
 	
-	struct Candle
+	struct TradingFrame
 	{
-		long time;
-		double avgHigh;
+		long idMax;
+		double totalQty;
+		double avgPrice;
 		bool hot;
 	};
 	
 	bool initial = true;	
-	vector<Candle> candle(btcPairs.size());
+	vector<TradingFrame> frames(btcPairs.size());
 
 	while (1)
 	{
@@ -279,86 +290,143 @@ int main()
 			// Use thread-private result container.
 			Json::Value result;
 
-			// Get Klines / CandleStick for each "*BTC" pair.
+			// Get last 500 trades for each "*BTC" pair.
 			while (1)
 			{
-				binanceError_t status = market.getKlines(pair.c_str(), "1m", 10, 0, 0, result);
+				binanceError_t status = account.getTrades(result, pair.c_str());
 				
 				if (status == binanceSuccess) break;
 				
 				fprintf(stderr, "%s\n", binanceGetErrorString(status));
 			}
 			
+			// Get the newest id across recent trades.
+			long idMax = 0, timeMax;
+			for (Json::Value::ArrayIndex j = 0; j < result.size(); j++)
+			{
+				long id = result[j]["id"].asInt64();
+				if (id > idMax)
+				{
+					idMax = id;
+					timeMax = result[j]["time"].asInt64();
+				}
+			}
+
+			// Get the average price across last minute trades.
+			double avgPrice = 0, totalQty = 0;
+			for (Json::Value::ArrayIndex j = 0; j < result.size(); j++)
+			{
+				long time = result[j]["time"].asInt64();
+				if (timeMax - 60 * 1000 > time) continue;
+
+				double price = atof(result[j]["price"].asString().c_str());
+				double qty = atof(result[j]["qty"].asString().c_str());
+
+				totalQty += qty;
+				avgPrice += price * qty;
+			}
+			
+			if (totalQty > 0)
+				avgPrice /= totalQty;
+			
+			// If we are on initial step, just record the result.
+			if (initial)
+			{
+				frames[i] = { idMax, totalQty, avgPrice, false };
+
+				cout << pair << " : " << frames[i].idMax << " : " << frames[i].avgPrice << endl;
+
+				continue;
+			}
+			
+			// Re-calculate the average price, accounting only trades
+			// that took place after the last seen frame's idMax.
+			idMax = 0;
+			long idMin = frames[i].idMax;
+			avgPrice = 0; totalQty = 0;
+			bool nonzero = false;
+			for (Json::Value::ArrayIndex j = 0; j < result.size(); j++)
+			{
+				long id = result[j]["id"].asInt64();
+				if (id <= idMin) continue;
+
+				idMax = max(id, idMax);
+
+				double price = atof(result[j]["price"].asString().c_str());
+				double qty = atof(result[j]["qty"].asString().c_str());
+
+				totalQty += qty;
+				avgPrice += price * qty;
+				nonzero = true;
+			}
+
+			if (!nonzero) continue;
+			
+			avgPrice /= totalQty;
+			
 			// Find update for the current time stamp.
 			int buy = -1;
 			bool hot = false;
-			for (Json::Value::ArrayIndex j = 0; j < result.size() ; j++)
+			if (avgPrice >= THRESHOLD * frames[i].avgPrice)
 			{
-				long newCandleTime = result[j][0].asInt64();
-				if (newCandleTime <= candle[i].time) continue;
-				
-				double newCandleAvgHigh = atof(result[j][4].asString().c_str());
-				if ((newCandleAvgHigh >= THRESHOLD * candle[i].avgHigh) && !initial)
+				buy++;
+
+				stringstream msg;
+				const string currency(pair.c_str(), pair.size() - 3);
+				const string symbol = currency + "_BTC";
+
+				msg << "<a href=\"https://www.binance.com/tradeDetail.html?symbol=" << symbol << "\">" << pair << "</a> +" <<
+					(avgPrice / frames[i].avgPrice * 100.0 - 100) << "% 📈";
+
+				// Rocket high?
+				if (avgPrice >= THRESHOLD_ROCKET * frames[i].avgPrice)
+					 msg << " 🚀";
+					
+				// Add a note, if we are in position for this currency.
+				if (positions.find(currency) != positions.end())
 				{
-					buy++;
-
-					stringstream msg;
-					const string currency(pair.c_str(), pair.size() - 3);
-					const string symbol = currency + "_BTC";
-
-					msg << "<a href=\"https://www.binance.com/tradeDetail.html?symbol=" << symbol << "\">" << pair << "</a> +" <<
-						(newCandleAvgHigh / candle[i].avgHigh * 100.0 - 100) << "% 📈";
-
-					// Rocket high?
-					if (newCandleAvgHigh >= THRESHOLD_ROCKET * candle[i].avgHigh)
-						 msg << " 🚀";
+					double amount = positions[currency].amount;
+					if (amount != 0)
+					{
+						msg << " POSITION: " << amount;
 						
-					// Add a note, if we are in position for this currency.
-					if (positions.find(currency) != positions.end())
-					{
-						double amount = positions[currency].amount;
-						if (amount != 0)
+						if (avgPrice * amount > THRESHOLD * positions[currency].value)
 						{
-							msg << " POSITION: " << amount;
-							
-							if (newCandleAvgHigh * amount > THRESHOLD * positions[currency].value)
-							{
-								double profit = newCandleAvgHigh * amount / positions[currency].value * 100 - 100;
-								msg << " RECOM: SELL +" << profit << "%";
-							}
-							else
-								msg << " RECOM: HOLD";
+							double profit = avgPrice * amount / positions[currency].value * 100 - 100;
+							msg << " RECOM: SELL +" << profit << "%";
 						}
+						else
+							msg << " RECOM: HOLD";
 					}
-					else
-					{
-						if (candle[i].hot) buy++;
-						if ((buy >= 1) && (j == (result.size() - 1)))
-							msg << " RECOM: <b>BUY</b>";
-					}
-
-					// Make BUY on the next round more attractive if the currently seen value
-					// is above the threshold (i.e. a hot candle).
-					hot = true;
-
-					// Communicate the result over the Telegram.
-					telegram.sendMessage(msg.str());
 				}
 				else
 				{
-					if (newCandleAvgHigh < candle[i].avgHigh)
-					{
-						buy = -INT_MAX;
-						hot = false;
-					}
+					if (frames[i].hot) buy++;
+					if (buy >= 1) msg << " RECOM: <b>BUY</b>";
 				}
 
-				candle[i].time = newCandleTime;
-				candle[i].avgHigh = newCandleAvgHigh;
+				// Make BUY on the next round more attractive if the currently seen value
+				// is above the threshold (i.e. a hot candle).
+				hot = true;
+
+				// Communicate the result over the Telegram.
+				telegram.sendMessage(msg.str());
 			}
-			candle[i].hot = hot;
+			else
+			{
+				if (avgPrice < frames[i].avgPrice)
+				{
+					buy = -INT_MAX;
+					hot = false;
+				}
+			}
+
+			frames[i].idMax = idMax;
+			frames[i].totalQty = totalQty;
+			frames[i].avgPrice = avgPrice;
+			frames[i].hot = hot;
 		
-			cout << pair << " : " << candle[i].time << " : " << candle[i].avgHigh << endl;
+			cout << pair << " : " << frames[i].idMax << " : " << frames[i].avgPrice << endl;
 		}
 	
 		initial = false;
