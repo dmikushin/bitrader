@@ -78,17 +78,19 @@ telegramError_t telegram::Bot::sendMessage(string message)
 
 	try
 	{
+		bool disableWebPagePreview = true;
+
 		// First, send queued messages, if any.
 		if (msgQueue.size())
 		{
 			for (int i = 0, e = msgQueue.size(); i < e; i++)
 			{
-				bot->getApi().sendMessage(chatid, msgQueue.front(), false, 0, TgBot::GenericReply::Ptr(), "HTML");
+				bot->getApi().sendMessage(chatid, msgQueue.front(), disableWebPagePreview, 0, TgBot::GenericReply::Ptr(), "HTML");
 				msgQueue.pop();
 			}
 		}
 				
-		bot->getApi().sendMessage(chatid, message, false, 0, TgBot::GenericReply::Ptr(), "HTML");
+		bot->getApi().sendMessage(chatid, message, disableWebPagePreview, 0, TgBot::GenericReply::Ptr(), "HTML");
 	}
 	catch (TgBot::TgException& e)
 	{

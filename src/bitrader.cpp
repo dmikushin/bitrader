@@ -375,7 +375,7 @@ int main()
 				const string currency(pair.c_str(), pair.size() - 3);
 				const string symbol = currency + "_BTC";
 
-				msg << "<a href=\"https://www.binance.com/tradeDetail.html?symbol=" << symbol << "\">" << pair << "</a> +" <<
+				msg << "<a href=\"https://www.binance.com/en/trade/" << symbol << "\">" << pair << "</a> +" <<
 					(avgPrice / frames[i].avgPrice * 100.0 - 100) << "% 📈";
 
 				// Rocket high?
