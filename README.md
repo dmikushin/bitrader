@@ -10,20 +10,20 @@ BITrader - Trading and Alering Service for Binance Cryptocurrency Exchange (http
 ### Prerequisites
 
 ```
-sudo apt-get install libjsoncpp-dev libcurl4-nss-dev libwebsockets-dev
-sudo apt-get install g++ make binutils cmake libssl-dev libboost-system-dev libboost-iostreams-dev
+sudo apt-get install g++ make binutils cmake libjsoncpp-dev libcurl4-nss-dev libssl-dev libboost-system-dev libboost-iostreams-dev
 ```
 
 ### Building
 
 ```
-git clone https://github.com/dmikushin/bitrader.git
+git clone --recurse-submodules https://github.com/dmikushin/bitrader.git
 cd bitrader
 git submodule init
 git submodule update
 mkdir build
 cd build/
 cmake ..
+make -j12
 ./bitrader
 ```
 
