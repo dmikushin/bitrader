@@ -24,6 +24,24 @@ mkdir build
 cd build/
 cmake ..
 make -j12
+```
+
+### Deployment
+
+The bot searches for api/secret API keys for Binance user account and reports error in case of failure. These keys are needed to get the available funds info and to perform buy/sell orders. Generate keys in Binance web interface on the "API management" panel:
+
+<img src="api_management.png" width="350"/>
+
+Place the generated keys into the following files:
+
+```
+$HOME/.bitrader/key
+$HOME/.bitrader/secret
+```
+
+Now start the trade bot:
+
+```
 ./bitrader
 ```
 
