@@ -98,5 +98,7 @@ telegramError_t telegram::Bot::sendMessage(string message)
 		// attempt next time.
 		msgQueue.push(message);
 	}
+
+	return status;
 }
 

@@ -16,5 +16,8 @@ const char* telegram::telegramGetErrorString(const telegramError_t err)
 	TELEGRAM_CASE_STR(telegramErrorMissingAccountKeys);
 	TELEGRAM_CASE_STR(telegramErrorSendMessageFailed);
 	}
+
+	static const string unknownError = "Unknown error";
+	return unknownError.c_str();
 }
 
