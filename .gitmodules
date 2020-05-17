@@ -1,6 +1,6 @@
 [submodule "binance-cxx-api"]
 	path = ThirdParty/binance-cxx-api
 	url = https://github.com/dmikushin/binance-cxx-api.git
-[submodule "tgbot-cpp"]
+[submodule "ThirdParty/tgbot-cpp"]
 	path = ThirdParty/tgbot-cpp
 	url = https://github.com/dmikushin/tgbot-cpp.git

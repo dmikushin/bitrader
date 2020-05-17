@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1.0)
+cmake_minimum_required(VERSION 3.13.4 FATAL_ERROR)
 
 project(bitrader)
 
@@ -15,10 +15,6 @@ if (OPENMP_FOUND)
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
-if (APPLE)
-set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl")
-endif()
-
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/binance-cxx-api")
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/tgbot-cpp")
 
@@ -27,5 +23,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${JSONCPP_INCLUDE_DIRS})
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/binance-cxx-api/include)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/tgbot-cpp/include)
-target_link_libraries(${PROJECT_NAME} binance-cxx-api tgbot-cpp ${OpenMP_CXX_LIBRARIES})
+target_include_directories(${PROJECT_NAME} PRIVATE ${Boost_INCLUDE_DIR})
+target_link_libraries(${PROJECT_NAME} binance-cxx-api TgBot ${OpenMP_CXX_LIBRARIES})
 
