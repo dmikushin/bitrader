@@ -23,8 +23,9 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/binance-cxx-api")
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/tgbot-cpp")
 
 add_executable(${PROJECT_NAME} src/bitrader.cpp src/telegram.cpp src/telegram_bot.cpp)
+target_include_directories(${PROJECT_NAME} PRIVATE ${JSONCPP_INCLUDE_DIRS})
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/binance-cxx-api/include)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/tgbot-cpp/include)
-target_link_libraries(${PROJECT_NAME} binance-cxx-api tgbot-cpp)
+target_link_libraries(${PROJECT_NAME} binance-cxx-api tgbot-cpp ${OpenMP_CXX_LIBRARIES})
 
