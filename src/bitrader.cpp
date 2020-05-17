@@ -96,6 +96,8 @@ int main()
 			positions[currency].amount = amount;
 	}
 
+	cout << "Finding current open orders ..." << endl;
+
 	BINANCE_ERR_CHECK(account.getOpenOrders(result));
 
 	// Adding open orders to position amount.
@@ -266,7 +268,7 @@ int main()
 		cout << ratio << "%)" << endl;
 	}
 	cout << "OK!" << endl << endl;
-	
+
 	struct TradingFrame
 	{
 		long idMax;
