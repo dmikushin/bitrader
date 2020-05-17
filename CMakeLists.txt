@@ -15,6 +15,10 @@ if (OPENMP_FOUND)
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
+if (APPLE)
+set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl")
+endif()
+
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/binance-cxx-api")
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/tgbot-cpp")
 
